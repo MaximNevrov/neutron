@@ -51,6 +51,7 @@ class RouterInfo(object):
         self._snat_enabled = None
         self.internal_ports = []
         self.floating_ips = set()
+        self.portforwarding = []
         # Invoke the setter for establishing initial SNAT action
         self.router = router
         self.use_ipv6 = use_ipv6
@@ -691,9 +692,65 @@ class RouterInfo(object):
                                namespace=self.ns_name,
                                prefix=EXTERNAL_DEV_PREFIX)
 
+        # Process Portforwarding rules before generic SNAT rule
+        if ex_gw_port:
+            self.process_router_portforwardings(ex_gw_port)
         # Process SNAT rules for external gateway
         gw_port = self._router.get('gw_port')
         self._handle_router_snat_rules(gw_port, interface_name)
+
+    def process_router_portforwardings(self, ex_gw_port):
+        if 'portforwardings' not in self.router:
+            return
+        new_portfwds = self.router['portforwardings']
+        for new_portfwd in new_portfwds:
+            new_portfwd['outside_addr'] = (
+                ex_gw_port.get('fixed_ips')[0].get('ip_address'))
+        old_portfwds = self.portforwarding
+        adds, removes = common_utils.diff_list_of_dict(old_portfwds,
+                                                       new_portfwds)
+        for portfwd in adds:
+            self._update_portforwardings('create', portfwd)
+        for portfwd in removes:
+            self._update_portforwardings('delete', portfwd)
+        self.portforwarding = new_portfwds
+
+    def _update_portforwardings(self, operation, portfwd):
+        """Configure the router's port forwarding rules."""
+        chain_prerouting, chain_output, chain_float_snat = "PREROUTING", "OUTPUT", "float-snat"
+        rule_prerouting = ("-p %(protocol)s"
+                           " -d %(outside_addr)s --dport %(outside_port)s"
+                           " -j DNAT --to %(inside_addr)s:%(inside_port)s"
+                           % portfwd)
+        rule_output = ("-p %(protocol)s"
+                       " -d %(outside_addr)s --dport %(outside_port)s"
+                       " -j DNAT --to %(inside_addr)s:%(inside_port)s"
+                       % portfwd)
+        rule_float_snat = ("-p %(protocol)s"
+                      " -s %(inside_addr)s --sport %(inside_port)s"
+                      " -j SNAT --to %(outside_addr)s:%(outside_port)s"
+                      % portfwd)
+        if operation == 'create':
+            LOG.debug(_("Added portforwarding rule_prerouting is '%s'"), rule_prerouting)
+            self.iptables_manager.ipv4['nat'].add_rule(chain_prerouting, rule_prerouting,
+                                                     tag='portforwarding')
+            LOG.debug(_("Added portforwarding rule_output is '%s'"), rule_output)
+            self.iptables_manager.ipv4['nat'].add_rule(chain_output, rule_output,
+                                                     top=True,
+                                                     tag='portforwarding')
+            LOG.debug(_("Added portforwarding float_snat is '%s'"), rule_float_snat)
+            self.iptables_manager.ipv4['nat'].add_rule(chain_float_snat, rule_float_snat,
+                                                     top=True,
+                                                     tag='portforwarding')
+        elif operation == 'delete':
+            LOG.debug(_("Removed portforwarding rule_prerouting is '%s'"), rule_prerouting)
+            self.iptables_manager.ipv4['nat'].remove_rule(chain_prerouting, rule_prerouting)
+            LOG.debug(_("Removed portforwarding rule_output is '%s'"), rule_output)
+            self.iptables_manager.ipv4['nat'].remove_rule(chain_output, rule_output)
+            LOG.debug(_("Removed portforwarding rule_float_snat is '%s'"), rule_float_snat)
+            self.iptables_manager.ipv4['nat'].remove_rule(chain_float_snat, rule_float_snat)
+        else:
+            raise Exception('should never be here')
 
     def external_gateway_nat_fip_rules(self, ex_gw_ip, interface_name):
         dont_snat_traffic_to_internal_ports_if_not_to_floating_ip = (
