@@ -238,6 +238,12 @@ def diff_list_of_dict(old_list, new_list):
     return [str2dict(a) for a in added], [str2dict(r) for r in removed]
 
 
+def compare_list_of_dict(old_list, new_list):
+    new_set = set([dict2str(l) for l in new_list])
+    old_set = set([dict2str(l) for l in old_list])
+    return new_set == old_set
+
+
 def is_extension_supported(plugin, ext_alias):
     return ext_alias in getattr(
         plugin, "supported_extension_aliases", [])
