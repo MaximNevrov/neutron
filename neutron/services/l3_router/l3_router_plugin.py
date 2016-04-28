@@ -33,6 +33,7 @@ from neutron.db import l3_hamode_db
 from neutron.plugins.common import constants
 from neutron.quota import resource_registry
 from neutron.services import service_base
+from neutron.db import portforwardings_db
 
 
 class L3RouterPlugin(service_base.ServicePluginBase,
@@ -41,7 +42,8 @@ class L3RouterPlugin(service_base.ServicePluginBase,
                      l3_hamode_db.L3_HA_NAT_db_mixin,
                      l3_gwmode_db.L3_NAT_db_mixin,
                      l3_dvr_ha_scheduler_db.L3_DVR_HA_scheduler_db_mixin,
-                     dns_db.DNSDbMixin):
+                     dns_db.DNSDbMixin,
+                     portforwardings_db.PortForwardingDbOnlyMixin):
 
     """Implementation of the Neutron L3 Router Service Plugin.
 
@@ -55,7 +57,7 @@ class L3RouterPlugin(service_base.ServicePluginBase,
     supported_extension_aliases = ["dvr", "router", "ext-gw-mode",
                                    "extraroute", "l3_agent_scheduler",
                                    "l3-ha", "router_availability_zone",
-                                   "dns-integration"]
+                                   "dns-integration", "portforwarding"]
 
     @resource_registry.tracked_resources(router=l3_db.Router,
                                          floatingip=l3_db.FloatingIP)
