@@ -31,6 +31,16 @@ def create_routerroutes():
                                 ondelete='CASCADE'),
         sa.PrimaryKeyConstraint('destination', 'nexthop', 'router_id'))
 
+def create_portforwardings():
+    op.create_table(
+        'portforwardings',
+        sa.Column('router_id', sa.String(length=36),nullable=False),
+        sa.Column('outside_port', sa.Integer(), nullable=False),
+        sa.Column('inside_addr', sa.String(length=15),nullable=False),
+        sa.Column('inside_port', sa.Integer(), nullable=False),
+        sa.Column('protocol', sa.String(length=4),nullable=False),
+        sa.ForeignKeyConstraint(['router_id'], ['routers.id'], ondelete='CASCADE'),
+        sa.PrimaryKeyConstraint('router_id', 'outside_port', 'inside_addr', 'inside_port', 'protocol'))
 
 def upgrade():
     op.create_table(
@@ -74,6 +84,8 @@ def upgrade():
         sa.PrimaryKeyConstraint('id'))
 
     create_routerroutes()
+
+    create_portforwardings()
 
     op.create_table(
         'routerl3agentbindings',
