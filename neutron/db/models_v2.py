@@ -104,6 +104,13 @@ class Route(object):
     destination = sa.Column(sa.String(64), nullable=False, primary_key=True)
     nexthop = sa.Column(sa.String(64), nullable=False, primary_key=True)
 
+class Forwarding(object):
+    """mixin of a forwarding."""
+    outside_port = sa.Column(sa.Integer(), nullable=False, primary_key=True)
+    inside_addr = sa.Column(sa.String(15), nullable=False, primary_key=True)
+    inside_port = sa.Column(sa.Integer(), nullable=False, primary_key=True)
+    protocol = sa.Column(sa.String(4), nullable=False, primary_key=True)
+
 
 class SubnetRoute(model_base.BASEV2, Route):
 
