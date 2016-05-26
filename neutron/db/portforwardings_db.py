@@ -66,16 +66,13 @@ class PortForwardingDbOnlyMixin(l3_db.L3_NAT_dbonly_mixin):
         l3.ROUTERS, ['_extend_router_dict_portforwarding'])
 
     def update_router(self, context, id, router):
-#        LOG.error(_LE('execute update_router func with router %s'), router)
         r = router['router']
         with context.session.begin(subtransactions=True):
             router_db = self._get_router(context, id)
             if 'portforwardings' in r:
+
                 try:
-                    self._validate_fwds(context, router_db,
-                                        r['portforwardings'])
-                    self._update_extra_portfwds(context, router_db,
-                                                r['portforwardings'])
+                    self._update_extra_portfwds(context, router_db, r['portforwardings'])
                     context.session.flush()
                 except db_exc.DBDuplicateEntry as e:
                     if 'outside_port' in e.columns:
@@ -91,6 +88,21 @@ class PortForwardingDbOnlyMixin(l3_db.L3_NAT_dbonly_mixin):
                     # NOTE(jianingy): raise original exception directly if
                     #                 duplication not caused by identical ports
                     raise
+#                    context.session.flush()
+#                except db_exc.DBDuplicateEntry as e:
+#                    if 'outside_port' in e.columns:
+#                        found = re.search("Duplicate entry '(\d+)' "
+#                                          "for key 'outside_port'",
+#                                          e.inner_exception.message)
+#                        if found:
+#                            raise portforwardings.DuplicatedOutsidePort(
+#                                port=found.group(1))
+#                        else:
+#                            raise portforwardings.DuplicatedOutsidePort(
+#                                port="unknown")
+#                    # NOTE(jianingy): raise original exception directly if
+#                    #                 duplication not caused by identical ports
+#                    raise
             portfwds = self._get_extra_portfwds_by_router_id(context, id)
 #        LOG.error(_LE('portfwds var: %s'), portfwds)
         router_updated = super(PortForwardingDbOnlyMixin, self).update_router(
@@ -99,14 +111,17 @@ class PortForwardingDbOnlyMixin(l3_db.L3_NAT_dbonly_mixin):
 #        LOG.error(_LE('router_db var: %s'), router)
         return router_updated
 
-    def _validate_fwds(self, context, router, portfwds):
-#        LOG.error(_LE('_validate_fwds function executed'))
+    def _validate_fwds(self, context, router_id, portfwds):
         query = context.session.query(models_v2.Network).join(models_v2.Port)
-        networks = query.filter_by(device_id=router['id'])
+        networks = query.filter_by(device_id=router_id)
         subnets = []
+        old_fwds = self._get_extra_portfwds_by_router_id(context, router_id)
+        if utils.compare_list_of_dict(old_fwds, portfwds):
+            raise portforwardings.AlreadyExist(rule=portfwds)
+#        if utils.compare_elements(old_fwds, portfwds):
+#            raise portforwardings.AlreadyExist(rule=portfwds)
         for network in networks:
             subnets.extend(map(lambda x: x['cidr'], network.subnets))
-
         ip_addr, ip_net = netaddr.IPAddress, netaddr.IPNetwork
         for portfwd in portfwds:
             ip_str = portfwd['inside_addr']
@@ -115,11 +130,13 @@ class PortForwardingDbOnlyMixin(l3_db.L3_NAT_dbonly_mixin):
                 raise portforwardings.InvalidInsideAddress(inside_addr=ip_str)
 
     def _update_extra_portfwds(self, context, router, portfwds):
+        self._validate_fwds(context, router['id'], portfwds)
         LOG.error(_LE('portfwds var from _update_extra_portfwds function: %s'), portfwds)
-        LOG.error(_LE('router var from _update_extra_portfwds function: %s'), router)
         old_fwds = self._get_extra_portfwds_by_router_id(context, router['id'])
         LOG.error(_LE('old_fwds var from _update_extra_portfwds function: %s'), old_fwds)
         added, removed = utils.diff_list_of_dict(old_fwds, portfwds)
+        LOG.error(_LE('added var from _update_extra_portfwds function: %s'), added)
+        LOG.error(_LE('removed var from _update_extra_portfwds function: %s'), removed)
         LOG.debug(_('Removed port forwarding rules are %s'), removed)
         # note(jianingy): remove first so that we won't encounter duplicated
         #                 entry.
