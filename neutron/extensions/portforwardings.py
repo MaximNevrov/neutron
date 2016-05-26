@@ -21,6 +21,7 @@ import re
 import six
 import abc
 from string import split
+import webob.exc
 from neutron._i18n import _
 from oslo_log import log as logging
 from neutron.api import extensions
@@ -37,26 +38,34 @@ class DuplicatedOutsidePort(qexception.InvalidInput):
     message = ("Outside port %(port)s has already been used.")
 
 
+class AlreadyExist(qexception.InvalidInput):
+    message = ("Port forwarding rule %(rule)s is already exist.")
+
+
 class InvalidInsideAddress(qexception.InvalidInput):
-    message = ("inside address %(inside_addr)s does not match "
-                "any subnets in this router.")
+    message = ("Inside address %(inside_addr)s does not match "
+                "any subnets in this router. Error message: %(msg)s.")
 
 
-#class PortforwardingsInvalidInsideAddress(qexception.InvalidInput):
-#    message = ("Invalid inside address %(inside_addr)s. Error msg: %(msg)s")
+class InvalidInsideAddress2(qexception.InvalidInput):
+    message = ("Inside address %(inside_addr)s does not match "
+                "any subnets in this router. Error message: %(msg)s.")
 
 
-#class PortforwardingsInvalidPortValue(qexception.InvalidInput):
-#    message = _("Invalid value for port %(port)s")
+class InvalidPortValue(qexception.InvalidInput):
+    message = _("Invalid value for port %(port)s. Error message: %(msg)s.")
 
 
-#class PortforwardingsInvalidProtocol(qexception.InvalidInput):
-#    message = _("Security group rule protocol %(protocol)s not supported. ")
+class InvalidProtocol(qexception.InvalidInput):
+    message = _("Port forwarding rule protocol %(protocol)s not supported.")
 
 
-#class PortforwardingsInvalidInput(qexception.InvalidInput):
-#    message = _("Wrong command %(command)s. Error message: %(msg)s")
+class InvalidInput(qexception.InvalidInput):
+    message = _("Wrong input value %(portfwd)s. Error message: %(msg)s")
 
+
+class DuplicatePortforwardingRuleInRequest(qexception.InvalidInput):
+    message = _("Request contains duplicate port forwarding rules: %(portfwds)s")
 
 """def convert_validate_port_value(port):
     if port is None:
@@ -64,14 +73,14 @@ class InvalidInsideAddress(qexception.InvalidInput):
     try:
         val = int(port)
     except (ValueError, TypeError):
-        raise PortforwardingsInvalidPortValue(port=port)
+        raise InvalidPortValue(port=port, msg="Not integer")
 
     if val >= 0 and val <= 65535:
         return val
     else:
-        raise PortforwardingsInvalidPortValue(port=port)
+        raise InvalidPortValue(port=port, msg="Not in 0-65535 range")
 
-def convert_protocol(value):
+def convert_validate_protocol(value):
     if value is None:
         return
     try:
@@ -81,61 +90,43 @@ def convert_protocol(value):
             # PostgreSQL fails when it tries to compare integer with string,
             # that exists in db.
             return str(value)
-        raise PortforwardingsInvalidProtocol(
-            protocol=value, values=supported_protocols)
+        raise InvalidProtocol(protocol=value)
     except (ValueError, TypeError):
         if value.lower() in supported_protocols:
             return value.lower()
-        raise PortforwardingsInvalidProtocol(
-            protocol=value, values=supported_protocols)
+        raise InvalidProtocol(protocol=value)
     except AttributeError:
-        raise PortforwardingsInvalidProtocol(
-            protocol=value, values=supported_protocols)
-"""
-"""def _validate_no_whitespace(data):
+        raise InvalidProtocol(protocol=value)
+
+def _validate_no_whitespace(data):
     if re.search(r'\s', data):
         msg = _("'%s' contains whitespace") % data
-        raise PortforwardingsInvalidInsideAddress(inside_addr=data,
-                                                  msg=msg)
+        raise InvalidInsideAddress2(inside_addr=data,msg=msg)
     return data
 
-def validate_ip_address(data, valid_values=None):
+def convert_validate_ip_address(data, valid_values=None):
     try:
         ip = netaddr.IPAddress(_validate_no_whitespace(data),
                                flags=netaddr.core.ZEROFILL)
         if ':' not in data and data.count('.') != 3:
             msg = _("'%s' is not a valid IP address") % data
-            raise PortforwardingsInvalidInsideAddress(inside_addr=data,
-                                                      msg=msg)
+            raise InvalidInsideAddress2(inside_addr=data,msg=msg)
         if ip.version == 4 and str(ip) != data:
             msg = _("'%(data)s' is not an accepted IP address, "
                     "'%(ip)s' is recommended") % {"data": data, "ip": ip}
-            raise PortforwardingsInvalidInsideAddress(inside_addr=data,
-                                                      msg=msg)
+            raise InvalidInsideAddress2(inside_addr=data,msg=msg)
     except Exception:
         msg = _("'%s' is not a valid IP address") % data
-        raise PortforwardingsInvalidInsideAddress(inside_addr=data,
-                                                  msg=msg)
+        raise InvalidInsideAddress2(inside_addr=data,msg=msg)
 
 def _validate_portforwardings(data, valid_values=None):
-    data_type = type(data)
-    msg1 = _("The type of data var: '%s'") % data_type
-    LOG.debug(msg1)
     if not isinstance(data, list):
         msg = _("Invalid data format for portforwarding: '%s'") % data
-        raise PortforwardingsInvalidInput(command=data,
-                                          msg=msg)
+        raise InvalidInput(command=data,msg=msg)
 
-def convert_command(value):
-    if value is None:
-        return []
-    else:
-        return attributes.convert_kvp_list_to_dict(split(value,','))"""
 
-"""supported_protocols = ['tcp', 'udp']
+supported_protocols = ['tcp', 'udp']
 
-attributes.validators['type:portforwardings'] = (
-    _validate_portforwardings)
 
 PORTFORWARDINGS = 'portforwardings'
 
@@ -147,25 +138,26 @@ RESOURCE_ATTRIBUTE_MAP = {
                          'primary_key': True},
         'inside_addr': {'allow_post': True, 'allow_put': True,
                         'is_visible': True,
-                        'convert_to': validate_ip_address,
+                        'convert_to': convert_validate_ip_address,
                         'primary_key': True},
         'inside_port': {'allow_post': True, 'allow_put': True,
                         'convert_to': convert_validate_port_value,
                         'is_visible': True,
                         'primary_key': True},
         'protocol': {'allow_post': True, 'allow_put': True,
-                     'convert_to': convert_protocol,
+                     'convert_to': convert_validate_protocol,
                      'is_visible': True,
                      'primary_key': True},
     },
-}
-"""
+}"""
+
 
 def _validate_portforwardings(data, valid_values=None):
     if not isinstance(data, list):
         msg = _("Invalid data format for portforwarding: '%s'") % data
-        LOG.debug(msg)
-        return msg
+        raise webob.exc.HTTPBadRequest(msg)
+#        LOG.debug(msg)
+#        return msg
 
     expected_keys = ['protocol', 'outside_port',
                      'inside_addr', 'inside_port']
@@ -173,29 +165,40 @@ def _validate_portforwardings(data, valid_values=None):
     for portfwd in data:
         msg = attributes._verify_dict_keys(expected_keys, portfwd)
         if msg:
-            LOG.debug(msg)
-            return msg
+            raise webob.exc.HTTPBadRequest(msg)
+#            LOG.debug(msg)
+#            return msg
+            #raise InvalidInput(portfwd=portfwd, msg=msg)
         msg = attributes._validate_range(portfwd['outside_port'], (0, 65535))
         if msg:
-            LOG.debug(msg)
-            return msg
+            raise webob.exc.HTTPBadRequest(msg)
+#            LOG.debug(msg)
+#            return msg
+            #raise InvalidPortValue(port=portfwd['outside_port'], msg=msg)
         msg = attributes._validate_ip_address(portfwd['inside_addr'])
         if msg:
-            LOG.debug(msg)
-            return msg
+            raise webob.exc.HTTPBadRequest(msg)
+#            LOG.debug(msg)
+#            return msg
         msg = attributes._validate_range(portfwd['inside_port'], (0, 65535))
         if msg:
-            LOG.debug(msg)
-            return msg
+            raise webob.exc.HTTPBadRequest(msg)
+#            LOG.debug(msg)
+#            return msg
+            #raise InvalidPortValue(portfwd['inside_port'], msg=msg)
         msg = attributes._validate_values(portfwd['protocol'].upper(), ('TCP', 'UDP'))
         if msg:
-            LOG.debug(msg)
-            return msg
+            raise webob.exc.HTTPBadRequest(msg)
+#            LOG.debug(msg)
+#            return msg
+            #raise InvalidProtocol(protocol=portfwd['protocol'].upper(), msg=msg)
         if portfwd in portfwds:
-            msg = _("Duplicate portforwarding '%s'") % portfwd
-            LOG.debug(msg)
-            return msg
-        portfwds.append(portfwd)
+            raise DuplicatePortforwardingRuleInRequest(portfwds=portfwds)
+#            msg = _("Duplicate portforwarding '%s'") % portfwd
+#            LOG.debug(msg)
+#            return msg
+            #raise InvalidInput(portfwd=portfwd, msg=msg)
+#        portfwds.append(portfwd)
 
 attributes.validators['type:portforwardings'] = (_validate_portforwardings)
 
@@ -234,6 +237,8 @@ class Portforwardings(extensions.ExtensionDescriptor):
         if version == "2.0":
             attributes.PLURALS.update({'portforwardings': 'portforwarding'})
             return EXTENDED_ATTRIBUTES_2_0
+#            return dict(list(EXTENDED_ATTRIBUTES_2_0.items()) +
+#                        list(RESOURCE_ATTRIBUTE_MAP.items()))
         else:
             return {}
 """    @classmethod
