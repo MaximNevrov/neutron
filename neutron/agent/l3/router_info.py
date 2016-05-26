@@ -709,6 +709,10 @@ class RouterInfo(object):
         old_portfwds = self.portforwarding
         adds, removes = common_utils.diff_list_of_dict(old_portfwds,
                                                        new_portfwds)
+        LOG.debug(_("process_router_portforwardings var adds'%s'"), adds)
+        LOG.debug(_("process_router_portforwardings var removes'%s'"), removes)
+        LOG.debug(_("process_router_portforwardings var old_portfwds'%s'"), old_portfwds)
+        LOG.debug(_("process_router_portforwardings var new_portfwds'%s'"), new_portfwds)
         for portfwd in adds:
             self._update_portforwardings('create', portfwd)
         for portfwd in removes:
@@ -727,9 +731,9 @@ class RouterInfo(object):
                        " -j DNAT --to %(inside_addr)s:%(inside_port)s"
                        % portfwd)
         rule_float_snat = ("-p %(protocol)s"
-                      " -s %(inside_addr)s --sport %(inside_port)s"
-                      " -j SNAT --to %(outside_addr)s:%(outside_port)s"
-                      % portfwd)
+                           " -s %(inside_addr)s --sport %(inside_port)s"
+                           " -j SNAT --to %(outside_addr)s:%(outside_port)s"
+                           % portfwd)
         if operation == 'create':
             LOG.debug(_("Added portforwarding rule_prerouting is '%s'"), rule_prerouting)
             self.iptables_manager.ipv4['nat'].add_rule(chain_prerouting, rule_prerouting,
@@ -746,9 +750,9 @@ class RouterInfo(object):
             LOG.debug(_("Removed portforwarding rule_prerouting is '%s'"), rule_prerouting)
             self.iptables_manager.ipv4['nat'].remove_rule(chain_prerouting, rule_prerouting)
             LOG.debug(_("Removed portforwarding rule_output is '%s'"), rule_output)
-            self.iptables_manager.ipv4['nat'].remove_rule(chain_output, rule_output)
+            self.iptables_manager.ipv4['nat'].remove_rule(chain_output, rule_output, top=True)
             LOG.debug(_("Removed portforwarding rule_float_snat is '%s'"), rule_float_snat)
-            self.iptables_manager.ipv4['nat'].remove_rule(chain_float_snat, rule_float_snat)
+            self.iptables_manager.ipv4['nat'].remove_rule(chain_float_snat, rule_float_snat, top=True)
         else:
             raise Exception('should never be here')
 
